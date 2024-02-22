@@ -3,9 +3,11 @@ use std::collections::{HashSet, VecDeque};
 use macroquad::prelude::*;
 use macroquad::prelude::KeyCode::{A, D, Escape, S, W};
 
+use crate::brain::predict_direction_naive;
 use crate::Direction::{Down, Left, Right, Up};
 use crate::utils::draw_text_center_default;
 
+mod brain;
 mod utils;
 
 const MAX_ROWS: usize = 20;
@@ -163,6 +165,12 @@ impl Snake {
         }
         self.direction = new_direction;
     }
+
+    fn get_head_position(&self) -> &Position {
+        self.chunks
+            .front()
+            .expect("snake should always have at least one chunk")
+    }
 }
 
 #[macroquad::main("Snake")]
@@ -186,7 +194,10 @@ async fn main() {
             Some(A) => game.snake.change_dir(last_good_direction, Left),
             Some(S) => game.snake.change_dir(last_good_direction, Down),
             Some(D) => game.snake.change_dir(last_good_direction, Right),
-            _ => {}
+            _ => game.snake.change_dir(
+                last_good_direction,
+                predict_direction_naive(&game.snake, &game.food),
+            ),
         }
 
         // check if it's time to tick the game logic
