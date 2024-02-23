@@ -2,8 +2,9 @@ use std::collections::{HashSet, VecDeque};
 
 use macroquad::prelude::*;
 use macroquad::prelude::KeyCode::{A, D, Escape, S, W};
+use macroquad::rand::ChooseRandom;
 
-use crate::brain::predict_direction_naive;
+use crate::brain::NeuralNetwork;
 use crate::Direction::{Down, Left, Right, Up};
 use crate::utils::draw_text_center_default;
 
@@ -38,6 +39,7 @@ impl Position {
 struct SnakeGame {
     snake: Snake,
     food: Option<Position>,
+    network: NeuralNetwork,
 }
 
 impl SnakeGame {
@@ -45,11 +47,36 @@ impl SnakeGame {
         let mut game = Self {
             snake: Snake::new(MAX_ROWS / 2, MAX_COLUMNS / 2),
             food: None,
+            network: NeuralNetwork::new(),
         };
 
         game.spawn_food();
 
         game
+    }
+
+    fn predict_direction(&self) -> Direction {
+        let dirs = [Right, Left, Up, Down];
+
+        let food_pos = self.food.unwrap();
+        let head_pos = self.snake.get_head_position();
+
+        // determine direction that will move us towards food
+        // row diff normalized for the row count
+        let row_diff = (head_pos.row as f32 - food_pos.row as f32) / MAX_ROWS as f32;
+        // col diff normalized for the col count
+        let col_diff = (head_pos.col as f32 - food_pos.col as f32) / MAX_COLUMNS as f32;
+
+        let input_vec: Vec<f32> = vec![row_diff, col_diff];
+
+        let prediction = self.network.probabilities(input_vec);
+        // find index of the max value in prediction vector
+        let max_probability = prediction.iter().copied().reduce(f32::max).unwrap();
+        let max_index = prediction
+            .iter()
+            .position(|&x| x == max_probability)
+            .unwrap();
+        dirs[max_index]
     }
 
     fn draw(&self, chunk_width: f32, chunk_height: f32) {
@@ -194,10 +221,9 @@ async fn main() {
             Some(A) => game.snake.change_dir(last_good_direction, Left),
             Some(S) => game.snake.change_dir(last_good_direction, Down),
             Some(D) => game.snake.change_dir(last_good_direction, Right),
-            _ => game.snake.change_dir(
-                last_good_direction,
-                predict_direction_naive(&game.snake, &game.food),
-            ),
+            _ => game
+                .snake
+                .change_dir(last_good_direction, game.predict_direction()),
         }
 
         // check if it's time to tick the game logic

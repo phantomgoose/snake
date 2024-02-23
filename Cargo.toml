@@ -7,3 +7,6 @@ edition = "2021"
 
 [dependencies]
 macroquad = "0.4.4"
+rand = "0.8.5"
+reverse = "0.2.2"
+talos = "0.1.0"
