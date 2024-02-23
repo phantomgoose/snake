@@ -2,6 +2,7 @@ use rand::prelude::*;
 use reverse::Tape;
 
 const INPUT_LAYER_WIDTH: usize = 2;
+const MIDDLE_LAYER_WIDTH: usize = 32;
 const OUTPUT_LAYER_WIDTH: usize = 4;
 
 struct Layer {
@@ -81,9 +82,11 @@ fn get_layer_of_size(input_size: usize, output_size: usize, activation: Activati
 impl NeuralNetwork {
     pub(crate) fn new() -> Self {
         let input_layer =
-            get_layer_of_size(INPUT_LAYER_WIDTH, OUTPUT_LAYER_WIDTH, Activation::ReLU);
+            get_layer_of_size(INPUT_LAYER_WIDTH, MIDDLE_LAYER_WIDTH, Activation::ReLU);
+        let output_layer =
+            get_layer_of_size(MIDDLE_LAYER_WIDTH, OUTPUT_LAYER_WIDTH, Activation::ReLU);
         Self {
-            layers: vec![input_layer],
+            layers: vec![input_layer, output_layer],
         }
     }
 

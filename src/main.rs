@@ -6,15 +6,14 @@ use macroquad::rand::ChooseRandom;
 
 use crate::brain::NeuralNetwork;
 use crate::Direction::{Down, Left, Right, Up};
-use crate::utils::draw_text_center_default;
 
 mod brain;
 mod utils;
 
-const MAX_ROWS: usize = 20;
-const MAX_COLUMNS: usize = 25;
+const MAX_ROWS: usize = 100;
+const MAX_COLUMNS: usize = 150;
 
-const GAME_STATE_UPDATE_RATE_SECS: f64 = 0.1;
+const GAME_STATE_UPDATE_RATE_SECS: f64 = 1. / 60.;
 
 #[derive(Eq, PartialEq, Copy, Clone)]
 enum Direction {
@@ -40,6 +39,7 @@ struct SnakeGame {
     snake: Snake,
     food: Option<Position>,
     network: NeuralNetwork,
+    prev_tick_time: f64,
 }
 
 impl SnakeGame {
@@ -48,6 +48,7 @@ impl SnakeGame {
             snake: Snake::new(MAX_ROWS / 2, MAX_COLUMNS / 2),
             food: None,
             network: NeuralNetwork::new(),
+            prev_tick_time: 0.,
         };
 
         game.spawn_food();
@@ -80,10 +81,11 @@ impl SnakeGame {
     }
 
     fn draw(&self, chunk_width: f32, chunk_height: f32) {
+        let snake_color = if self.snake.dead { GRAY } else { GREEN };
         for chunk in self.snake.chunks.iter() {
             let x = (chunk.col as f32) * chunk_width;
             let y = (chunk.row as f32) * chunk_height;
-            draw_rectangle(x, y, chunk_width, chunk_height, GREEN);
+            draw_rectangle(x, y, chunk_width, chunk_height, snake_color);
         }
 
         if let Some(food) = &self.food {
@@ -92,10 +94,10 @@ impl SnakeGame {
             draw_rectangle(x, y, chunk_width, chunk_height, ORANGE);
         }
 
-        if self.snake.dead {
-            let msg = format!("You're dead! Score: {}", self.get_score());
-            draw_text_center_default(msg.as_str());
-        }
+        // if self.snake.dead {
+        //     let msg = format!("You're dead! Score: {}", self.get_score());
+        //     draw_text_center_default(msg.as_str());
+        // }
     }
 
     fn get_score(&self) -> usize {
@@ -202,11 +204,14 @@ impl Snake {
 
 #[macroquad::main("Snake")]
 async fn main() {
-    let mut game = SnakeGame::new();
+    let manual_control = false;
+    let mut games = Vec::new();
 
-    let mut prev_tick_time = 0.;
+    for _ in 0..100 {
+        games.push(SnakeGame::new());
+    }
+
     // direction that the snake was heading in (which is known to not have caused it to die)
-    let mut last_good_direction = game.snake.direction;
 
     let chunk_width = screen_width() / MAX_COLUMNS as f32;
     let chunk_height = screen_height() / MAX_ROWS as f32;
@@ -216,28 +221,37 @@ async fn main() {
             break;
         }
 
-        match get_last_key_pressed() {
-            Some(W) => game.snake.change_dir(last_good_direction, Up),
-            Some(A) => game.snake.change_dir(last_good_direction, Left),
-            Some(S) => game.snake.change_dir(last_good_direction, Down),
-            Some(D) => game.snake.change_dir(last_good_direction, Right),
-            _ => game
-                .snake
-                .change_dir(last_good_direction, game.predict_direction()),
-        }
-
         // check if it's time to tick the game logic
         // TODO: this should be based on frame time
         let time = get_time();
-        if time - prev_tick_time > GAME_STATE_UPDATE_RATE_SECS {
-            game.crawl();
 
-            last_good_direction = game.snake.direction;
-            prev_tick_time = time;
+        for game in &mut games {
+            let mut last_good_direction = game.snake.direction;
+
+            if manual_control {
+                match get_last_key_pressed() {
+                    Some(W) => game.snake.change_dir(last_good_direction, Up),
+                    Some(A) => game.snake.change_dir(last_good_direction, Left),
+                    Some(S) => game.snake.change_dir(last_good_direction, Down),
+                    Some(D) => game.snake.change_dir(last_good_direction, Right),
+                    _ => {}
+                }
+            } else {
+                game.snake
+                    .change_dir(last_good_direction, game.predict_direction());
+            }
+
+            if time - game.prev_tick_time > GAME_STATE_UPDATE_RATE_SECS {
+                game.crawl();
+
+                last_good_direction = game.snake.direction;
+                game.prev_tick_time = time;
+            }
+
+            game.draw(chunk_width, chunk_height);
         }
 
-        clear_background(BLACK);
-        game.draw(chunk_width, chunk_height);
+        // clear_background(BLACK);
 
         next_frame().await
     }
