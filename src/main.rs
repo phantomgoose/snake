@@ -2,23 +2,23 @@ use std::collections::{HashSet, VecDeque};
 
 use macroquad::input::KeyCode::Escape;
 use macroquad::prelude::*;
-use macroquad::prelude::KeyCode::{A, D, R, S, W};
+use macroquad::prelude::KeyCode::{A, D, S, W};
 use macroquad::rand::ChooseRandom;
 
 use crate::brain::NeuralNetwork;
 use crate::Direction::{Down, Left, Right, Up};
-use crate::utils::draw_text_center_default;
 
 mod brain;
 mod utils;
 
-const MAX_ROWS: usize = 50;
-const MAX_COLUMNS: usize = 50;
+const MAX_ROWS: usize = 100;
+const MAX_COLUMNS: usize = 100;
 
-const GAME_STATE_UPDATE_RATE_SECS: f64 = 1. / 60.;
-const SNAKE_COUNT: usize = 100;
-const SELECTION_DIVISOR: usize = 2;
-const MAX_TICKS_WITH_NO_FOOD: usize = 1000;
+const GAME_STATE_UPDATE_RATE_SECS: f64 = 1. / 60000.;
+const SNAKE_COUNT: usize = 1000;
+const SELECTION_DIVISOR: usize = 5;
+const FOOD_REWARD: f32 = 10000.;
+const MAX_TICKS_WITH_NO_FOOD: usize = 500;
 const SELF_COLLISION_ENABLED: bool = false;
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
@@ -44,7 +44,6 @@ impl Position {
 #[derive(Clone)]
 struct SnakeGame {
     snake: Snake,
-    food: Option<Position>,
     network: NeuralNetwork,
     prev_tick_time: f64,
     ticks_with_no_food: usize,
@@ -54,22 +53,17 @@ struct SnakeGame {
 
 impl SnakeGame {
     fn new(snake_id: usize, neural_network: Option<NeuralNetwork>) -> Self {
-        let mut game = Self {
+        Self {
             snake: Snake::new(MAX_ROWS / 2, MAX_COLUMNS / 2, snake_id),
-            food: None,
             network: neural_network.unwrap_or_default(),
             prev_tick_time: 0.,
             score: 0.,
             ticks_with_no_food: 0,
-        };
-
-        game.spawn_food();
-
-        game
+        }
     }
 
-    fn predict_direction(&self) -> Direction {
-        let food_pos = self.food.unwrap();
+    fn predict_direction(&self, food: &Food) -> Direction {
+        let food_pos = food.pos;
         let head_pos = self.snake.get_head_position();
 
         // determine direction that will move us towards food
@@ -78,7 +72,15 @@ impl SnakeGame {
         // col diff normalized for the col count
         let col_diff = (head_pos.col as f32 - food_pos.col as f32) / MAX_COLUMNS as f32;
 
-        let input_vec: Vec<f32> = vec![row_diff, col_diff];
+        let row_bounds_closeness = head_pos.row as f32 / MAX_ROWS as f32;
+        let col_bounds_closeness = head_pos.col as f32 / MAX_COLUMNS as f32;
+
+        let input_vec: Vec<f32> = vec![
+            row_diff,
+            col_diff,
+            row_bounds_closeness,
+            col_bounds_closeness,
+        ];
 
         let dirs = vec![Right, Left, Up, Down];
         self.network.classify(input_vec, dirs)
@@ -92,19 +94,13 @@ impl SnakeGame {
             draw_rectangle(x, y, chunk_width, chunk_height, snake_color);
         }
 
-        if let Some(food) = &self.food {
-            let x = (food.col as f32) * chunk_width;
-            let y = (food.row as f32) * chunk_height;
-            draw_rectangle(x, y, chunk_width, chunk_height, ORANGE);
-        }
-
         // if self.snake.dead {
         //     let msg = format!("You're dead! Score: {}", self.get_score());
         //     draw_text_center_default(msg.as_str());
         // }
     }
 
-    fn crawl(&mut self) {
+    fn crawl(&mut self, food: &mut Food) {
         assert!(
             !self.snake.chunks.is_empty(),
             "Snake should always have at least one chunk"
@@ -152,28 +148,52 @@ impl SnakeGame {
         }
 
         // if we reached food, we don't lose our tail, causing the snake to grow! We do eat the food, however
-        if self.food == Some(new_position) {
+        if food.pos == new_position {
             // reward for food
-            self.score += 10.;
+            self.score += FOOD_REWARD;
             // no longer starving
             self.ticks_with_no_food = 0;
             // spawn new food
-            self.spawn_food();
+            food.respawn();
         } else {
+            // reward for being alive, proportional to how close to the food it is
+            // find
+            let head_pos = Vec2::new(new_position.col as f32, new_position.row as f32);
+            let food_pos = Vec2::new(food.pos.col as f32, food.pos.row as f32);
+            let distance = head_pos.distance_squared(food_pos);
+            self.score += 1. / distance;
+
             let chunk = self.snake.chunks.pop_front().unwrap();
             self.snake.chunk_set.remove(&chunk);
         }
 
-        // reward for being alive
-        self.score += 0.01;
         self.snake.chunk_set.insert(new_position);
         self.snake.chunks.push_back(new_position);
     }
+}
 
-    fn spawn_food(&mut self) {
+struct Food {
+    pos: Position,
+}
+
+impl Food {
+    fn new() -> Self {
+        let mut food = Food {
+            pos: Position::new(0, 0),
+        };
+        food.respawn();
+        food
+    }
+    fn respawn(&mut self) {
         let random_row = rand::gen_range(2, MAX_ROWS);
         let random_col = rand::gen_range(2, MAX_COLUMNS);
-        self.food = Some(Position::new(random_row, random_col));
+        self.pos = Position::new(random_row, random_col);
+    }
+
+    fn draw(&self, chunk_width: f32, chunk_height: f32) {
+        let x = (self.pos.col as f32) * chunk_width;
+        let y = (self.pos.row as f32) * chunk_height;
+        draw_rectangle(x, y, chunk_width, chunk_height, ORANGE);
     }
 }
 
@@ -239,6 +259,8 @@ async fn main() {
     let chunk_width = screen_width() / MAX_COLUMNS as f32;
     let chunk_height = screen_height() / MAX_ROWS as f32;
 
+    let mut food = Food::new();
+
     loop {
         // TODO: turn the following into a macro
         if is_key_pressed(Escape) {
@@ -249,7 +271,7 @@ async fn main() {
         // TODO: this should be based on frame time
         let time = get_time();
 
-        for game in &mut games {
+        for (i, game) in &mut games.iter_mut().enumerate() {
             let last_good_direction = game.snake.direction;
 
             // update direction
@@ -263,69 +285,74 @@ async fn main() {
                 }
             } else {
                 game.snake
-                    .change_dir(last_good_direction, game.predict_direction());
+                    .change_dir(last_good_direction, game.predict_direction(&food));
             }
 
             // update state
             let time_since_last_tick = time - game.prev_tick_time;
             if time_since_last_tick > GAME_STATE_UPDATE_RATE_SECS {
-                game.crawl();
+                game.crawl(&mut food);
 
                 game.prev_tick_time = time;
             }
 
-            // draw
+            // draw just the first game to see progress
+            // if i == 0 {
             game.draw(chunk_width, chunk_height);
+            // }
         }
 
-        if games.iter().all(|g| {
-            g.snake.dead
-                // TODO: figure out a better way to kill snakes that live too long without eating
-                || g.score > 5.
-        }) {
+        food.draw(chunk_width, chunk_height);
+
+        // see if round is over, trigger evolution if so
+        if games.iter().all(|g| g.snake.dead) {
             // TODO: pick some poor performers too
             games.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
             let mut top_snakes = games
                 .iter()
+                .rev()
                 .take(SNAKE_COUNT / SELECTION_DIVISOR)
                 .collect::<Vec<_>>();
 
+            let mut new_snakes = Vec::with_capacity(SNAKE_COUNT);
+
+            for top_snake in top_snakes.iter() {
+                new_snakes.push(SnakeGame::new(0, Some(top_snake.network.clone())))
+            }
+
             top_snakes.shuffle();
 
-            let mut new_snakes = Vec::new();
+            let snake_pairs = top_snakes.chunks(2).collect::<Vec<_>>();
 
-            // TODO: clear existing snakes' state, only keep NNs
-
-            for pair in top_snakes.chunks(2) {
-                if let [snake_a, snake_b] = pair {
-                    let [offspring_nn_a, offspring_nn_b] = snake_a.network.mate(&snake_b.network);
-                    let offspring_a = SnakeGame::new(0, Some(offspring_nn_a));
-                    let offspring_b = SnakeGame::new(0, Some(offspring_nn_b));
-                    new_snakes.push(offspring_a);
-                    new_snakes.push(offspring_b);
-                } else {
-                    panic!("Found a pair of snakes with len != 2");
+            while new_snakes.len() < SNAKE_COUNT {
+                for pair in snake_pairs.iter() {
+                    if new_snakes.len() >= SNAKE_COUNT {
+                        break;
+                    }
+                    if let [snake_a, snake_b] = pair {
+                        let [offspring_nn_a, offspring_nn_b] =
+                            snake_a.network.mate(&snake_b.network);
+                        let offspring_a = SnakeGame::new(0, Some(offspring_nn_a));
+                        let offspring_b = SnakeGame::new(0, Some(offspring_nn_b));
+                        new_snakes.push(offspring_a);
+                        new_snakes.push(offspring_b);
+                    } else {
+                        // self-replicate
+                        let child_nns = pair[0].network.mate(&pair[0].network);
+                        for child_nn in child_nns {
+                            new_snakes.push(SnakeGame::new(0, Some(child_nn)));
+                        }
+                    }
                 }
             }
 
-            // push existing snakes to new snakes, but clear their state
-            for old_snake in top_snakes {
-                let clear_snake = SnakeGame::new(0, Some(old_snake.network.clone()));
-                new_snakes.push(clear_snake);
+            while new_snakes.len() > SNAKE_COUNT {
+                new_snakes.pop();
             }
 
             assert_eq!(new_snakes.len(), SNAKE_COUNT);
 
-            loop {
-                draw_text_center_default("All sneks dead");
-                match get_last_key_pressed() {
-                    Some(R) => {
-                        games = new_snakes;
-                        break;
-                    }
-                    _ => next_frame().await,
-                }
-            }
+            games = new_snakes;
         }
 
         next_frame().await

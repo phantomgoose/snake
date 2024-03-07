@@ -1,8 +1,8 @@
 use rand::prelude::*;
 use reverse::Tape;
 
-const INPUT_LAYER_WIDTH: usize = 2;
-const MIDDLE_LAYER_WIDTH: usize = 32;
+const INPUT_LAYER_WIDTH: usize = 4;
+const MIDDLE_LAYER_WIDTH: usize = 64;
 const OUTPUT_LAYER_WIDTH: usize = 4;
 const MUTATION_RATE: f32 = 0.1;
 
@@ -64,9 +64,9 @@ impl Layer {
         let mut rng = thread_rng();
         for i in 0..self.weights.len() {
             for j in 0..self.weights[i].len() {
-                self.weights[i][j] += rng.gen_range(-MUTATION_RATE..=MUTATION_RATE);
+                self.weights[i][j] *= 1. + rng.gen_range(-MUTATION_RATE..=MUTATION_RATE);
             }
-            self.biases[i] += rng.gen_range(-MUTATION_RATE..=MUTATION_RATE);
+            self.biases[i] *= 1. + rng.gen_range(-MUTATION_RATE..=MUTATION_RATE);
         }
 
         self
@@ -118,8 +118,15 @@ impl NeuralNetwork {
     }
 
     fn predict(&self, inputs: Vec<f32>) -> Vec<f32> {
-        assert!(!self.layers.is_empty());
-        assert_eq!(self.layers[0].weights[0].len(), inputs.len());
+        assert!(
+            !self.layers.is_empty(),
+            "Expected layers to exist in the neural network."
+        );
+        assert_eq!(
+            self.layers[0].weights[0].len(),
+            inputs.len(),
+            "Input length must match input layer size"
+        );
 
         self.layers
             .iter()
