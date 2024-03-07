@@ -4,7 +4,9 @@ use reverse::Tape;
 const INPUT_LAYER_WIDTH: usize = 2;
 const MIDDLE_LAYER_WIDTH: usize = 32;
 const OUTPUT_LAYER_WIDTH: usize = 4;
+const MUTATION_RATE: f32 = 0.1;
 
+#[derive(Clone)]
 struct Layer {
     weights: Vec<Vec<f32>>,
     // Now each layer has multiple neurons, each with its own set of weights
@@ -12,6 +14,7 @@ struct Layer {
     activation: Activation,
 }
 
+#[derive(Copy, Clone)]
 enum Activation {
     Sigmoid,
     ReLU,
@@ -19,15 +22,6 @@ enum Activation {
 }
 
 impl Layer {
-    fn new(weights: Vec<Vec<f32>>, biases: Vec<f32>, activation: Activation) -> Layer {
-        assert_eq!(weights.len(), biases.len());
-        Layer {
-            weights,
-            biases,
-            activation,
-        }
-    }
-
     fn forward(&self, inputs: &[f32]) -> Vec<f32> {
         let mut outputs = vec![];
         for (i, bias) in self.biases.iter().enumerate() {
@@ -51,8 +45,35 @@ impl Layer {
         }
         outputs
     }
+
+    /// Creates a child by randomly swapping weights & biases between the 2 given layers
+    fn crossover(&self, other: &Layer) -> Layer {
+        let mut clone_self = self.clone();
+        let mut clone_other = other.clone();
+        for i in 0..self.weights.len() {
+            if random() {
+                std::mem::swap(&mut clone_self.weights[i], &mut clone_other.weights[i]);
+                std::mem::swap(&mut clone_self.biases[i], &mut clone_other.biases[i]);
+            }
+        }
+
+        clone_self
+    }
+
+    fn mutate(mut self) -> Layer {
+        let mut rng = thread_rng();
+        for i in 0..self.weights.len() {
+            for j in 0..self.weights[i].len() {
+                self.weights[i][j] += rng.gen_range(-MUTATION_RATE..=MUTATION_RATE);
+            }
+            self.biases[i] += rng.gen_range(-MUTATION_RATE..=MUTATION_RATE);
+        }
+
+        self
+    }
 }
 
+#[derive(Clone)]
 pub(crate) struct NeuralNetwork {
     layers: Vec<Layer>,
 }
@@ -60,7 +81,7 @@ pub(crate) struct NeuralNetwork {
 fn get_rand_vec_of_size(size: usize) -> Vec<f32> {
     let mut rng = thread_rng();
     let mut vec: Vec<f32> = Vec::with_capacity(size);
-    for i in 0..size {
+    for _ in 0..size {
         vec.push(rng.gen_range(-1.0..=1.0));
     }
     vec
@@ -76,6 +97,12 @@ fn get_layer_of_size(input_size: usize, output_size: usize, activation: Activati
         weights,
         biases,
         activation,
+    }
+}
+
+impl Default for NeuralNetwork {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -99,7 +126,7 @@ impl NeuralNetwork {
             .fold(inputs, |acc, layer| layer.forward(&acc))
     }
 
-    pub(crate) fn probabilities(&self, inputs: Vec<f32>) -> Vec<f32> {
+    fn probabilities(&self, inputs: Vec<f32>) -> Vec<f32> {
         let logits = self.predict(inputs);
         let tape = Tape::new();
         let params = tape.add_vars(
@@ -113,5 +140,37 @@ impl NeuralNetwork {
             .iter()
             .map(|val| val.val as f32)
             .collect()
+    }
+
+    pub(crate) fn classify<T>(&self, inputs: Vec<f32>, classes: Vec<T>) -> T
+    where
+        T: Copy,
+    {
+        let prediction = self.probabilities(inputs);
+        assert_eq!(prediction.len(), classes.len());
+
+        // find index of the max value in prediction vector
+        let max_probability = prediction.iter().copied().reduce(f32::max).unwrap();
+        let max_index = prediction
+            .iter()
+            .position(|&x| x == max_probability)
+            .unwrap();
+
+        classes[max_index]
+    }
+
+    pub(crate) fn mate(&self, other: &NeuralNetwork) -> [NeuralNetwork; 2] {
+        let mut network_a = NeuralNetwork { layers: vec![] };
+        let mut network_b = NeuralNetwork { layers: vec![] };
+
+        for (i, layer) in self.layers.iter().enumerate() {
+            let new_layer = layer.crossover(&other.layers[i]).mutate();
+            network_a.layers.push(new_layer);
+
+            let new_layer = layer.crossover(&other.layers[i]).mutate();
+            network_b.layers.push(new_layer);
+        }
+
+        [network_a, network_b]
     }
 }
