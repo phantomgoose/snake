@@ -1,5 +1,7 @@
 use std::collections::{HashSet, VecDeque};
 
+use kdtree::distance::squared_euclidean;
+use kdtree::KdTree;
 use macroquad::input::KeyCode::Escape;
 use macroquad::prelude::*;
 use macroquad::prelude::KeyCode::{A, D, S, W};
@@ -15,12 +17,16 @@ mod utils;
 const MAX_ROWS: usize = 100;
 const MAX_COLUMNS: usize = 100;
 
-const GAME_STATE_UPDATE_RATE_SECS: f64 = 1. / 600.;
+const FOOD_COUNT: usize = 1;
+
+const GAME_STATE_UPDATE_RATE_SECS: f64 = 1. / 60000.;
 const SNAKE_COUNT: usize = 1000;
-const SELECTION_DIVISOR: usize = 3;
+const SELECTION_DIVISOR: usize = 5;
 const FOOD_REWARD: f32 = 10000.;
 const MAX_TICKS_WITH_NO_FOOD: usize = 400;
 const SELF_COLLISION_ENABLED: bool = false;
+const REWARD_FOOD_PROXIMITY: bool = true;
+const PUNISH_FOR_CRASHING: bool = false;
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 enum Direction {
@@ -42,7 +48,6 @@ impl Position {
     }
 }
 
-#[derive(Clone)]
 struct SnakeGame {
     snake: Snake,
     network: NeuralNetwork,
@@ -63,8 +68,7 @@ impl SnakeGame {
         }
     }
 
-    fn predict_direction(&self, food: &Food) -> Direction {
-        let food_pos = food.pos;
+    fn predict_direction(&self, food_pos: Position) -> Direction {
         let head_pos = self.snake.get_head_position();
 
         // determine direction that will move us towards food
@@ -104,9 +108,6 @@ impl SnakeGame {
     }
 
     fn draw(&self, chunk_width: f32, chunk_height: f32) {
-        if self.snake.dead {
-            return;
-        }
         let snake_color = if self.snake.dead { GRAY } else { GREEN };
         for chunk in self.snake.chunks.iter() {
             let x = (chunk.col as f32) * chunk_width;
@@ -120,7 +121,7 @@ impl SnakeGame {
         // }
     }
 
-    fn crawl(&mut self, food: &mut Food) {
+    fn crawl(&mut self, food: &mut Food, closest_food_pos: Position) {
         assert!(
             !self.snake.chunks.is_empty(),
             "Snake should always have at least one chunk"
@@ -157,8 +158,10 @@ impl SnakeGame {
             || new_chunk_col.unwrap() > MAX_COLUMNS - 1
         {
             self.snake.dead = true;
-            // punishment for running into a wall
-            self.score *= 0.2;
+            if PUNISH_FOR_CRASHING {
+                // punishment for running into a wall
+                self.score *= 0.2;
+            }
             return;
         }
 
@@ -171,20 +174,23 @@ impl SnakeGame {
         }
 
         // if we reached food, we don't lose our tail, causing the snake to grow! We do eat the food, however
-        if food.pos == new_position {
+        if closest_food_pos == new_position {
             // reward for food
             self.score += FOOD_REWARD;
             // no longer starving
             self.ticks_with_no_food = 0;
+            // food is eaten and not available to other snakes
+            food.positions.remove(&closest_food_pos);
             // spawn new food
-            food.respawn();
+            food.refill();
         } else {
-            // reward for being alive, proportional to how close to the food it is
-            // find
-            let head_pos = Vec2::new(new_position.col as f32, new_position.row as f32);
-            let food_pos = Vec2::new(food.pos.col as f32, food.pos.row as f32);
-            let distance = head_pos.distance_squared(food_pos);
-            self.score += 1. / distance;
+            if REWARD_FOOD_PROXIMITY {
+                // reward for being alive, proportional to how close to the food it is
+                let head_pos = Vec2::new(new_position.col as f32, new_position.row as f32);
+                let food_pos = Vec2::new(closest_food_pos.col as f32, closest_food_pos.row as f32);
+                let distance = head_pos.distance_squared(food_pos);
+                self.score += 1. / distance;
+            }
 
             let chunk = self.snake.chunks.pop_front().unwrap();
             self.snake.chunk_set.remove(&chunk);
@@ -196,27 +202,40 @@ impl SnakeGame {
 }
 
 struct Food {
-    pos: Position,
+    positions: HashSet<Position>,
 }
 
 impl Food {
     fn new() -> Self {
         let mut food = Food {
-            pos: Position::new(0, 0),
+            positions: HashSet::new(),
         };
-        food.respawn();
+
+        food.refill();
         food
     }
-    fn respawn(&mut self) {
-        let random_row = rand::gen_range(3, MAX_ROWS - 3);
-        let random_col = rand::gen_range(3, MAX_COLUMNS - 3);
-        self.pos = Position::new(random_row, random_col);
+    fn refill(&mut self) {
+        while self.positions.len() < FOOD_COUNT {
+            let new_pos = loop {
+                // TODO: optimize...
+                let random_row = rand::gen_range(3, MAX_ROWS - 3);
+                let random_col = rand::gen_range(3, MAX_COLUMNS - 3);
+                let spawn_pos = Position::new(random_row, random_col);
+                if !self.positions.contains(&spawn_pos) {
+                    break spawn_pos;
+                }
+            };
+
+            self.positions.insert(new_pos);
+        }
     }
 
     fn draw(&self, chunk_width: f32, chunk_height: f32) {
-        let x = (self.pos.col as f32) * chunk_width;
-        let y = (self.pos.row as f32) * chunk_height;
-        draw_rectangle(x, y, chunk_width, chunk_height, ORANGE);
+        for pos in self.positions.iter() {
+            let x = (pos.col as f32) * chunk_width;
+            let y = (pos.row as f32) * chunk_height;
+            draw_rectangle(x, y, chunk_width, chunk_height, ORANGE);
+        }
     }
 }
 
@@ -255,9 +274,10 @@ impl Snake {
         self.direction = new_direction;
     }
 
-    fn get_head_position(&self) -> &Position {
+    fn get_head_position(&self) -> Position {
         self.chunks
             .front()
+            .copied()
             .expect("snake should always have at least one chunk")
     }
 }
@@ -287,6 +307,7 @@ async fn main() {
     let mut generation = 0;
 
     let mut do_draw = true;
+    let mut wait_for_starvation = true;
 
     loop {
         // TODO: turn the following into a macro
@@ -298,12 +319,21 @@ async fn main() {
             do_draw = !do_draw;
         }
 
+        if is_key_pressed(KeyCode::X) {
+            wait_for_starvation = !wait_for_starvation;
+        }
+
         // check if it's time to tick the game logic
         // TODO: this should be based on frame time
         let time = get_time();
 
         for (i, game) in &mut games.iter_mut().enumerate() {
             let last_good_direction = game.snake.direction;
+
+            let closest_food_pos =
+                find_closest_pos(game.snake.get_head_position(), &food.positions);
+
+            let closest_food_pos = closest_food_pos.unwrap();
 
             // update direction
             if manual_control {
@@ -315,14 +345,16 @@ async fn main() {
                     _ => {}
                 }
             } else {
-                game.snake
-                    .change_dir(last_good_direction, game.predict_direction(&food));
+                game.snake.change_dir(
+                    last_good_direction,
+                    game.predict_direction(closest_food_pos),
+                );
             }
 
             // update state
             let time_since_last_tick = time - game.prev_tick_time;
             if time_since_last_tick > GAME_STATE_UPDATE_RATE_SECS {
-                game.crawl(&mut food);
+                game.crawl(&mut food, closest_food_pos);
 
                 game.prev_tick_time = time;
             }
@@ -336,7 +368,8 @@ async fn main() {
         let msg = format!("Generation {}", generation);
         draw_text_center_default(msg.as_str());
 
-        // see if round is over, trigger evolution if so
+        // round is over if all snakes are dead
+        // trigger evolution if so
         if games.iter().all(|g| g.snake.dead) {
             // TODO: pick some poor performers too
             games.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
@@ -385,9 +418,35 @@ async fn main() {
             assert_eq!(new_snakes.len(), SNAKE_COUNT);
 
             games = new_snakes;
+            food = Food::new();
             generation += 1;
         }
 
         next_frame().await
     }
+}
+
+fn find_closest_pos(curr_pos: Position, targets: &HashSet<Position>) -> Option<Position> {
+    let mut tree = KdTree::new(2);
+
+    let targets_slice = targets.iter().copied().collect::<Vec<_>>();
+
+    for (i, pos) in targets_slice.iter().enumerate() {
+        tree.add([pos.col as f32, pos.row as f32], i).unwrap();
+    }
+
+    let closest_positions = tree
+        .nearest(
+            &[curr_pos.col as f32, curr_pos.row as f32],
+            1,
+            &squared_euclidean,
+        )
+        .unwrap();
+
+    if closest_positions.is_empty() {
+        return None;
+    }
+
+    let closest_idx = *closest_positions[0].1;
+    Some(targets_slice[closest_idx])
 }

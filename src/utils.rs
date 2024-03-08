@@ -29,7 +29,7 @@ pub(crate) fn predict_direction_naive(snake: &Snake, food: &Option<Position>) ->
     }
 
     let food_pos = food.unwrap();
-    let head_pos = *snake.get_head_position();
+    let head_pos = snake.get_head_position();
 
     // determine direction that will move us towards food
     let row_diff = head_pos.row as i32 - food_pos.row as i32;
