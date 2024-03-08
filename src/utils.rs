@@ -1,9 +1,9 @@
-use macroquad::color::GRAY;
+use macroquad::color::WHITE;
 use macroquad::prelude::{Color, draw_text, get_text_center, screen_height, screen_width};
 
 use crate::{Direction, Position, Snake};
 
-const CENTER_TEXT_COLOR: Color = GRAY;
+const CENTER_TEXT_COLOR: Color = WHITE;
 const CENTER_TEXT_SIZE: u16 = 32;
 
 pub(crate) fn draw_text_center(msg_str: &str, font_size: u16, text_color: Color) {

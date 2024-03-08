@@ -7,6 +7,7 @@ use macroquad::rand::ChooseRandom;
 
 use crate::brain::NeuralNetwork;
 use crate::Direction::{Down, Left, Right, Up};
+use crate::utils::draw_text_center_default;
 
 mod brain;
 mod utils;
@@ -14,11 +15,11 @@ mod utils;
 const MAX_ROWS: usize = 100;
 const MAX_COLUMNS: usize = 100;
 
-const GAME_STATE_UPDATE_RATE_SECS: f64 = 1. / 60000.;
+const GAME_STATE_UPDATE_RATE_SECS: f64 = 1. / 600.;
 const SNAKE_COUNT: usize = 1000;
-const SELECTION_DIVISOR: usize = 5;
+const SELECTION_DIVISOR: usize = 3;
 const FOOD_REWARD: f32 = 10000.;
-const MAX_TICKS_WITH_NO_FOOD: usize = 500;
+const MAX_TICKS_WITH_NO_FOOD: usize = 400;
 const SELF_COLLISION_ENABLED: bool = false;
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
@@ -75,18 +76,37 @@ impl SnakeGame {
         let row_bounds_closeness = head_pos.row as f32 / MAX_ROWS as f32;
         let col_bounds_closeness = head_pos.col as f32 / MAX_COLUMNS as f32;
 
-        let input_vec: Vec<f32> = vec![
+        let dirs = vec![Right, Left, Up, Down];
+
+        let snake_dir_encoding = dirs
+            .iter()
+            .map(|dir| {
+                if *dir == self.snake.direction {
+                    1.0
+                } else {
+                    0.
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let mut input_vec: Vec<f32> = vec![
             row_diff,
             col_diff,
             row_bounds_closeness,
             col_bounds_closeness,
         ];
 
-        let dirs = vec![Right, Left, Up, Down];
+        input_vec.extend_from_slice(snake_dir_encoding.as_slice());
+
+        assert!(input_vec.iter().all(|i| -1. <= *i && *i <= 1.));
+
         self.network.classify(input_vec, dirs)
     }
 
     fn draw(&self, chunk_width: f32, chunk_height: f32) {
+        if self.snake.dead {
+            return;
+        }
         let snake_color = if self.snake.dead { GRAY } else { GREEN };
         for chunk in self.snake.chunks.iter() {
             let x = (chunk.col as f32) * chunk_width;
@@ -110,6 +130,7 @@ impl SnakeGame {
             return;
         }
 
+        // TODO: train all the agents in parallel and let them live longer
         // starvation
         self.ticks_with_no_food += 1;
         if self.ticks_with_no_food > MAX_TICKS_WITH_NO_FOOD {
@@ -136,6 +157,8 @@ impl SnakeGame {
             || new_chunk_col.unwrap() > MAX_COLUMNS - 1
         {
             self.snake.dead = true;
+            // punishment for running into a wall
+            self.score *= 0.2;
             return;
         }
 
@@ -185,8 +208,8 @@ impl Food {
         food
     }
     fn respawn(&mut self) {
-        let random_row = rand::gen_range(2, MAX_ROWS);
-        let random_col = rand::gen_range(2, MAX_COLUMNS);
+        let random_row = rand::gen_range(3, MAX_ROWS - 3);
+        let random_col = rand::gen_range(3, MAX_COLUMNS - 3);
         self.pos = Position::new(random_row, random_col);
     }
 
@@ -261,10 +284,18 @@ async fn main() {
 
     let mut food = Food::new();
 
+    let mut generation = 0;
+
+    let mut do_draw = true;
+
     loop {
         // TODO: turn the following into a macro
         if is_key_pressed(Escape) {
             break;
+        }
+
+        if is_key_pressed(KeyCode::V) {
+            do_draw = !do_draw;
         }
 
         // check if it's time to tick the game logic
@@ -296,13 +327,14 @@ async fn main() {
                 game.prev_tick_time = time;
             }
 
-            // draw just the first game to see progress
-            // if i == 0 {
-            game.draw(chunk_width, chunk_height);
-            // }
+            if do_draw {
+                game.draw(chunk_width, chunk_height);
+            }
         }
 
         food.draw(chunk_width, chunk_height);
+        let msg = format!("Generation {}", generation);
+        draw_text_center_default(msg.as_str());
 
         // see if round is over, trigger evolution if so
         if games.iter().all(|g| g.snake.dead) {
@@ -353,6 +385,7 @@ async fn main() {
             assert_eq!(new_snakes.len(), SNAKE_COUNT);
 
             games = new_snakes;
+            generation += 1;
         }
 
         next_frame().await

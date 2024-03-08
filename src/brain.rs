@@ -1,10 +1,10 @@
 use rand::prelude::*;
 use reverse::Tape;
 
-const INPUT_LAYER_WIDTH: usize = 4;
+const INPUT_LAYER_WIDTH: usize = 8;
 const MIDDLE_LAYER_WIDTH: usize = 64;
 const OUTPUT_LAYER_WIDTH: usize = 4;
-const MUTATION_RATE: f32 = 0.1;
+const MUTATION_RATE: f32 = 0.3;
 
 #[derive(Clone)]
 struct Layer {
