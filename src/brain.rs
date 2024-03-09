@@ -4,7 +4,7 @@ use reverse::Tape;
 const INPUT_LAYER_WIDTH: usize = 8;
 const MIDDLE_LAYER_WIDTH: usize = 256;
 const OUTPUT_LAYER_WIDTH: usize = 4;
-const MUTATION_RATE: f32 = 0.1;
+const MUTATION_RATE: f32 = 0.5;
 
 #[derive(Clone)]
 struct Layer {
@@ -117,7 +117,7 @@ impl NeuralNetwork {
         }
     }
 
-    fn predict(&self, inputs: Vec<f32>) -> Vec<f32> {
+    fn predict(&self, inputs: &[f32]) -> Vec<f32> {
         assert!(
             !self.layers.is_empty(),
             "Expected layers to exist in the neural network."
@@ -130,10 +130,10 @@ impl NeuralNetwork {
 
         self.layers
             .iter()
-            .fold(inputs, |acc, layer| layer.forward(&acc))
+            .fold(inputs.to_vec(), |acc, layer| layer.forward(&acc))
     }
 
-    fn probabilities(&self, inputs: Vec<f32>) -> Vec<f32> {
+    fn probabilities(&self, inputs: &[f32]) -> Vec<f32> {
         let logits = self.predict(inputs);
         let tape = Tape::new();
         let params = tape.add_vars(
@@ -149,7 +149,7 @@ impl NeuralNetwork {
             .collect()
     }
 
-    pub(crate) fn classify<T>(&self, inputs: Vec<f32>, classes: Vec<T>) -> T
+    pub(crate) fn classify<T>(&self, inputs: &[f32], classes: &[T]) -> T
     where
         T: Copy,
     {

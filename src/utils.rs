@@ -1,10 +1,40 @@
 use macroquad::color::WHITE;
+use macroquad::math::Vec2;
 use macroquad::prelude::{Color, draw_text, get_text_center, screen_height, screen_width};
 
-use crate::{Direction, Position, Snake};
+use crate::Snake;
+use crate::utils::Direction::{Down, Left, Right, Up};
 
 const CENTER_TEXT_COLOR: Color = WHITE;
 const CENTER_TEXT_SIZE: u16 = 32;
+
+pub(crate) const DIRECTIONS: [Direction; 4] = [Left, Right, Up, Down];
+
+#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+pub enum Direction {
+    Left = 0,
+    Right = 1,
+    Up = 2,
+    Down = 3,
+}
+
+#[derive(Eq, PartialEq, Hash, Copy, Clone)]
+pub(crate) struct Position {
+    pub(crate) row: usize,
+    pub(crate) col: usize,
+}
+
+impl Position {
+    pub(crate) fn new(row: usize, col: usize) -> Self {
+        Self { row, col }
+    }
+}
+
+impl From<Position> for Vec2 {
+    fn from(pos: Position) -> Self {
+        Self::new(pos.col as f32, pos.row as f32)
+    }
+}
 
 pub(crate) fn draw_text_center(msg_str: &str, font_size: u16, text_color: Color) {
     let text_center = get_text_center(msg_str, None, font_size, 1., 0.0);
