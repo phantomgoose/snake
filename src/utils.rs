@@ -5,8 +5,10 @@ use macroquad::prelude::{Color, draw_text, get_text_center, screen_height, scree
 use crate::Snake;
 use crate::utils::Direction::{Down, Left, Right, Up};
 
-const CENTER_TEXT_COLOR: Color = WHITE;
+const DEFAULT_TEXT_COLOR: Color = WHITE;
 const CENTER_TEXT_SIZE: u16 = 32;
+const CORNER_TEXT_SIZE: u16 = 16;
+const TEXT_PADDING: f32 = 5.;
 
 pub(crate) const DIRECTIONS: [Direction; 4] = [Left, Right, Up, Down];
 
@@ -48,7 +50,16 @@ pub(crate) fn draw_text_center(msg_str: &str, font_size: u16, text_color: Color)
 }
 
 pub(crate) fn draw_text_center_default(msg_str: &str) {
-    draw_text_center(msg_str, CENTER_TEXT_SIZE, CENTER_TEXT_COLOR)
+    draw_text_center(msg_str, CENTER_TEXT_SIZE, DEFAULT_TEXT_COLOR)
+}
+
+pub(crate) fn draw_text_corner(messages: &[&str]) {
+    let x = TEXT_PADDING;
+    let mut y = TEXT_PADDING + CORNER_TEXT_SIZE as f32;
+    for msg in messages {
+        draw_text(msg, x, y, CORNER_TEXT_SIZE as f32, DEFAULT_TEXT_COLOR);
+        y += CORNER_TEXT_SIZE as f32;
+    }
 }
 
 pub(crate) fn predict_direction_naive(snake: &Snake, food: &Option<Position>) -> Direction {

@@ -2,15 +2,15 @@ use std::collections::{HashSet, VecDeque};
 
 use kdtree::distance::squared_euclidean;
 use kdtree::KdTree;
-use macroquad::prelude::*;
 use macroquad::prelude::KeyCode::{Escape, Q};
+use macroquad::prelude::*;
 use macroquad::rand::ChooseRandom;
 
-use utils::{Direction, Position};
 use utils::Direction::{Down, Left, Right, Up};
+use utils::{Direction, Position};
 
 use crate::brain::NeuralNetwork;
-use crate::utils::{DIRECTIONS, draw_text_center_default};
+use crate::utils::{draw_text_center_default, draw_text_corner, DIRECTIONS};
 
 mod brain;
 mod utils;
@@ -21,7 +21,7 @@ const MAX_COLUMNS: usize = 100;
 const FOOD_COUNT: usize = 1;
 const SNAKE_COUNT: usize = 1000;
 
-const SELECTION_RATE: f32 = 0.2;
+const SELECTION_RATE: f32 = 0.3;
 const FOOD_REWARD: f32 = 10000.;
 // snake dies of starvation if it doesn't get to food in this many ticks. Prevents snakes looping around permanently.
 const MAX_TICKS_WITH_NO_FOOD: usize = 400;
@@ -179,6 +179,8 @@ impl SnakeGame {
             let chunk = self.snake.chunks.pop_front().unwrap();
             self.snake.chunk_set.remove(&chunk);
         }
+
+        draw_text_corner(&[get_fps().to_string().as_str()]);
 
         // grow the snake, appending its head
         self.snake.chunk_set.insert(new_position);

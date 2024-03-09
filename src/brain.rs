@@ -2,7 +2,8 @@ use rand::prelude::*;
 use reverse::Tape;
 
 const INPUT_LAYER_WIDTH: usize = 8;
-const MIDDLE_LAYER_WIDTH: usize = 256;
+const MIDDLE_LAYER_WIDTH: usize = 64;
+const HIDDEN_LAYER_WIDTH: usize = 32;
 const OUTPUT_LAYER_WIDTH: usize = 4;
 const MUTATION_RATE: f32 = 0.5;
 
@@ -108,12 +109,12 @@ impl Default for NeuralNetwork {
 
 impl NeuralNetwork {
     pub(crate) fn new() -> Self {
-        let input_layer =
-            get_layer_of_size(INPUT_LAYER_WIDTH, MIDDLE_LAYER_WIDTH, Activation::ReLU);
-        let output_layer =
-            get_layer_of_size(MIDDLE_LAYER_WIDTH, OUTPUT_LAYER_WIDTH, Activation::ReLU);
+        let activation = Activation::ReLU;
+        let input_layer = get_layer_of_size(INPUT_LAYER_WIDTH, MIDDLE_LAYER_WIDTH, activation);
+        let hidden_layer = get_layer_of_size(MIDDLE_LAYER_WIDTH, HIDDEN_LAYER_WIDTH, activation);
+        let output_layer = get_layer_of_size(HIDDEN_LAYER_WIDTH, OUTPUT_LAYER_WIDTH, activation);
         Self {
-            layers: vec![input_layer, output_layer],
+            layers: vec![input_layer, hidden_layer, output_layer],
         }
     }
 
