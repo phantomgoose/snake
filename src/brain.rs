@@ -3,9 +3,9 @@ use reverse::Tape;
 
 const INPUT_LAYER_WIDTH: usize = 8;
 const MIDDLE_LAYER_WIDTH: usize = 64;
-const HIDDEN_LAYER_WIDTH: usize = 32;
+const HIDDEN_LAYER_WIDTH: usize = 64;
 const OUTPUT_LAYER_WIDTH: usize = 4;
-const MUTATION_RATE: f32 = 0.5;
+const MUTATION_RATE: f32 = 0.3;
 
 #[derive(Clone)]
 struct Layer {
@@ -157,28 +157,29 @@ impl NeuralNetwork {
         let prediction = self.probabilities(inputs);
         assert_eq!(prediction.len(), classes.len());
 
-        // find index of the max value in prediction vector
-        let max_probability = prediction.iter().copied().reduce(f32::max).unwrap();
         let max_index = prediction
             .iter()
-            .position(|&x| x == max_probability)
-            .unwrap();
+            .enumerate()
+            .max_by(|(_, a), (_, b)| a.total_cmp(b))
+            .map(|(index, _)| index)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Expected to find a max value in prediction {:?}, but it was None instead",
+                    prediction
+                )
+            });
 
         classes[max_index]
     }
 
-    pub(crate) fn mate(&self, other: &NeuralNetwork) -> [NeuralNetwork; 2] {
-        let mut network_a = NeuralNetwork { layers: vec![] };
-        let mut network_b = NeuralNetwork { layers: vec![] };
+    pub(crate) fn mate(&self, other: &NeuralNetwork) -> NeuralNetwork {
+        let mut new_network = NeuralNetwork { layers: vec![] };
 
         for (i, layer) in self.layers.iter().enumerate() {
             let new_layer = layer.crossover(&other.layers[i]).mutate();
-            network_a.layers.push(new_layer);
-
-            let new_layer = layer.crossover(&other.layers[i]).mutate();
-            network_b.layers.push(new_layer);
+            new_network.layers.push(new_layer);
         }
 
-        [network_a, network_b]
+        new_network
     }
 }

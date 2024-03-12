@@ -1,3 +1,7 @@
+use std::collections::HashSet;
+
+use kdtree::distance::squared_euclidean;
+use kdtree::KdTree;
 use macroquad::color::WHITE;
 use macroquad::math::Vec2;
 use macroquad::prelude::{Color, draw_text, get_text_center, screen_height, screen_width};
@@ -96,4 +100,34 @@ pub(crate) fn predict_direction_naive(snake: &Snake, food: &Option<Position>) ->
     } else {
         current_dir
     }
+}
+
+pub(crate) fn find_closest_pos(curr_pos: Position, targets: &HashSet<Position>) -> Position {
+    assert!(
+        !targets.is_empty(),
+        "expected to find at least one target, but the set was empty"
+    );
+    if targets.len() < 2 {
+        // no need for any fancy optimization here. Useful for the default scenario of only one food being spawned at a time
+        return *targets.iter().next().unwrap();
+    }
+
+    let mut tree = KdTree::new(2);
+
+    let targets_slice = targets.iter().copied().collect::<Vec<_>>();
+
+    for (i, pos) in targets_slice.iter().enumerate() {
+        tree.add([pos.col as f32, pos.row as f32], i).unwrap();
+    }
+
+    let closest_positions = tree
+        .nearest(
+            &[curr_pos.col as f32, curr_pos.row as f32],
+            1,
+            &squared_euclidean,
+        )
+        .unwrap();
+
+    let closest_idx = *closest_positions[0].1;
+    targets_slice[closest_idx]
 }
