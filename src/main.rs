@@ -1,3 +1,4 @@
+use std::cmp::{max, min};
 use std::collections::{HashSet, VecDeque};
 
 use macroquad::prelude::*;
@@ -23,8 +24,12 @@ const SELECTION_RATE: f32 = 0.2;
 const FOOD_REWARD: f32 = 10000.;
 // snake dies of starvation if it doesn't get to food in this many ticks. Prevents snakes looping around permanently.
 const MAX_TICKS_WITH_NO_FOOD: usize = 400;
+// how many generations to iterate over when training is triggered
+const GENERATIONS_PER_TRAINING_RUN: usize = 300;
+// if a snake eats this much without dying, we assume it's good enough to trigger next evolution
+const MAX_SCORE_PER_GENERATION: f32 = FOOD_REWARD * 20.;
 // whether the snake will die if it collides with itself
-const SELF_COLLISION_ENABLED: bool = false;
+const SELF_COLLISION_ENABLED: bool = true;
 // reward the snake for getting close to food, even if it doesn't consume it
 const REWARD_FOOD_PROXIMITY: bool = true;
 // reduce the snake's final score if it dies prior to starving (eg by running into a wall or itself)
@@ -66,10 +71,35 @@ impl SnakeGame {
         let col_diff = (head_pos.col as f32 - food_pos.col as f32) / MAX_COLUMNS as f32;
 
         // proximity to board borders (0..MAX_ROWS/COLUMNS), normalized for board size
-        let row_bounds_proximity = head_pos.row as f32 / MAX_ROWS as f32;
-        let col_bounds_proximity = head_pos.col as f32 / MAX_COLUMNS as f32;
+        // proximity to self
+        let mut left_boundary = 0;
+        let mut right_boundary = MAX_COLUMNS;
+        let mut up_boundary = 0;
+        let mut down_boundary = MAX_ROWS;
+        for chunk in self.snake.chunks.iter() {
+            if *chunk == head_pos {
+                // skip current chunk, we're only intested in the rest of the body
+                continue;
+            }
+            if chunk.row == head_pos.row {
+                if chunk.col < head_pos.col {
+                    left_boundary = max(left_boundary, chunk.col);
+                } else {
+                    right_boundary = min(right_boundary, chunk.col);
+                }
+            } else if chunk.col == head_pos.col {
+                if chunk.row < head_pos.row {
+                    up_boundary = max(up_boundary, chunk.row);
+                } else {
+                    down_boundary = min(down_boundary, chunk.row);
+                }
+            }
+        }
 
-        // TODO: add proximity to self (ray-based from head, left/right/forward relative to current dir
+        let row_bounds_proximity =
+            (head_pos.row - up_boundary) as f32 / (down_boundary - up_boundary) as f32;
+        let col_bounds_proximity =
+            (head_pos.col - left_boundary) as f32 / (right_boundary - left_boundary) as f32;
 
         let mut input_vec = [
             row_diff,
@@ -124,6 +154,11 @@ impl SnakeGame {
         self.ticks_until_starvation -= 1;
         if self.ticks_until_starvation == 0 {
             self.snake.dead = true;
+            if PUNISH_FOR_CRASHING {
+                // punishment for running into itself
+                // TODO: separate score from snake state, so we don't have to duplicate this logic
+                self.score *= 0.2;
+            }
             return;
         }
 
@@ -322,6 +357,7 @@ fn init_games(count: usize) -> Vec<SnakeGame> {
 fn run_simulation(
     games: Vec<SnakeGame>,
     max_generations: usize,
+    max_score: f32,
     curr_generation: &mut usize,
 ) -> (Vec<SnakeGame>, SnakeGame) {
     // grab just the NNs from the supplied games
@@ -337,15 +373,19 @@ fn run_simulation(
             .iter_mut()
             .for_each(|g| g.run_game_logic(false));
 
-        // trigger evolution once all the snakes are dead
-        if cloned_games.iter().all(|g| g.snake.dead) {
+        let sample_size = (SNAKE_COUNT as f32 * SELECTION_RATE) as usize;
+
+        // trigger evolution once all the snakes are dead OR there is a sufficient sample size of snakes above score threshold (to prevent games from running infinitely)
+        if cloned_games.iter().all(|g| g.snake.dead)
+            || cloned_games.iter().filter(|g| g.score > max_score).count() > sample_size
+        {
             // TODO: pick some poor performers too, to expand the gene pool
             // find the best performing snakes
             cloned_games.sort_by(|a, b| a.score.total_cmp(&b.score));
             let mut top_snakes = cloned_games
                 .iter()
                 .rev() // gotta remember to reverse here to get descending order
-                .take((SNAKE_COUNT as f32 * SELECTION_RATE) as usize)
+                .take(sample_size)
                 .collect::<Vec<_>>();
 
             // TODO: plot this instead, prolly via a crate
@@ -414,9 +454,16 @@ async fn main() {
 
         if is_key_pressed(V) {
             // trigger evolution
-            (games, best_snake) = run_simulation(games, 50, &mut generation);
+            (games, best_snake) = run_simulation(
+                games,
+                GENERATIONS_PER_TRAINING_RUN,
+                MAX_SCORE_PER_GENERATION,
+                &mut generation,
+            );
         }
 
+        // TODO: display snake score, food eaten, and length
+        // TODO: render @ 60fps
         best_snake.run_game_logic(true);
 
         best_snake.draw(chunk_width, chunk_height);
