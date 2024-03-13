@@ -1,7 +1,7 @@
 use rand::prelude::*;
 use reverse::Tape;
 
-const INPUT_LAYER_WIDTH: usize = 8;
+const INPUT_LAYER_WIDTH: usize = 10;
 const MIDDLE_LAYER_WIDTH: usize = 64;
 const HIDDEN_LAYER_WIDTH: usize = 64;
 const OUTPUT_LAYER_WIDTH: usize = 4;
@@ -135,6 +135,8 @@ impl NeuralNetwork {
 
     fn probabilities(&self, inputs: &[f32]) -> Vec<f32> {
         let logits = self.predict(inputs);
+
+        // TODO: make softmax a first class activation function by refactoring the layer forward func
         let tape = Tape::new();
         let params = tape.add_vars(
             logits

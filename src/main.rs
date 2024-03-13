@@ -29,9 +29,9 @@ const SNAKE_COUNT: usize = 1000;
 const SELECTION_RATE: f32 = 0.3;
 const FOOD_REWARD: f32 = 10000.;
 // snake dies of starvation if it doesn't get to food in this many ticks. Prevents snakes looping around permanently.
-const MAX_TICKS_WITH_NO_FOOD: usize = 400;
+const MAX_TICKS_WITH_NO_FOOD: usize = 500;
 // how many generations to iterate over when training is triggered
-const GENERATIONS_PER_TRAINING_RUN: usize = 400;
+const GENERATIONS_PER_TRAINING_RUN: usize = 300;
 // if a snake eats this much without dying, we assume it's good enough to trigger next evolution
 const MAX_SCORE_PER_GENERATION: f32 = FOOD_REWARD * 25.;
 // whether the snake will die if it collides with itself
@@ -73,11 +73,10 @@ impl SnakeGame {
         let head_pos = self.snake.get_head_position();
 
         // row and column diffs compared to food location, normalized for the board size
-        let row_diff = (head_pos.row as f32 - food_pos.row as f32) / MAX_ROWS as f32;
-        let col_diff = (head_pos.col as f32 - food_pos.col as f32) / MAX_COLUMNS as f32;
+        let row_food_proximity = (head_pos.row as f32 - food_pos.row as f32) / MAX_ROWS as f32;
+        let col_food_proximity = (head_pos.col as f32 - food_pos.col as f32) / MAX_COLUMNS as f32;
 
-        // proximity to board borders (0..MAX_ROWS/COLUMNS), normalized for board size
-        // proximity to self
+        // proximity to self or board borders, whichever is closer
         let mut left_boundary = 0;
         let mut right_boundary = MAX_COLUMNS;
         let mut up_boundary = 0;
@@ -102,24 +101,37 @@ impl SnakeGame {
             }
         }
 
-        let row_bounds_proximity =
+        let row_self_proximity =
             (head_pos.row - up_boundary) as f32 / (down_boundary - up_boundary) as f32;
-        let col_bounds_proximity =
+        let col_self_proximity =
             (head_pos.col - left_boundary) as f32 / (right_boundary - left_boundary) as f32;
 
+        // proximity to board borders (0..MAX_ROWS/COLUMNS), normalized for board size
+        // we could technically get away with not providing this information, but I think having
+        // a stable representation of the snake's position within the game world that doesn't
+        // haphazardly change as the snake moves around is actually really important for helping
+        // it avoid colliding with itself when near borders at greater body lengths
+        let row_bounds_proximity = head_pos.row as f32 / MAX_ROWS as f32;
+        let col_bounds_proximity = head_pos.col as f32 / MAX_COLUMNS as f32;
+
+        // NOTE: inputs contain an encoding of the snake's direction. This is currently applied by indexing into the inputs array, so be careful changing the layout here
         let mut input_vec = [
-            row_diff,
-            col_diff,
+            // snake direction encoding
+            0.,
+            0.,
+            0.,
+            0.,
+            // positional info
+            row_food_proximity,
+            col_food_proximity,
+            row_self_proximity,
+            col_self_proximity,
             row_bounds_proximity,
             col_bounds_proximity,
-            0.,
-            0.,
-            0.,
-            0.,
         ];
 
         // encode snake's current direction
-        input_vec[self.snake.direction as usize + 4] = 1.;
+        input_vec[self.snake.direction as usize] = 1.;
 
         // ensure we normalized all inputs
         assert!(
