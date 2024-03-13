@@ -26,7 +26,7 @@ const MAX_COLUMNS: usize = 100;
 const FOOD_COUNT: usize = 1;
 const SNAKE_COUNT: usize = 1000;
 
-const SELECTION_RATE: f32 = 0.3;
+const SELECTION_RATE: f32 = 0.2;
 const FOOD_REWARD: f32 = 10000.;
 // snake dies of starvation if it doesn't get to food in this many ticks. Prevents snakes looping around permanently.
 const MAX_TICKS_WITH_NO_FOOD: usize = 500;
@@ -384,6 +384,10 @@ fn run_simulation(
         .map(|g| SnakeGame::new(Some(g.network)))
         .collect::<Vec<_>>();
 
+    let mut generation_start_ts = std::time::Instant::now();
+    let mut generation_durations = VecDeque::new();
+    let durations_to_store = 10;
+
     let mut generation_counter = 0;
 
     loop {
@@ -397,10 +401,10 @@ fn run_simulation(
         // TODO: score-based threshold here hinders training past a few hundred generations because all of the snakes begin to reach the threshold too easily and stop evolving beyond that point. Should switch to some other metric, like length of time spent on a given iteration of the simulation.
         if cloned_games.par_iter().all(|g| g.snake.dead)
             || cloned_games
-                .par_iter()
-                .filter(|g| g.score > max_score)
-                .count()
-                > sample_size
+            .par_iter()
+            .filter(|g| g.score > max_score)
+            .count()
+            > sample_size
         {
             // TODO: pick some poor performers too, to expand the gene pool
             // find the best performing snakes
@@ -412,10 +416,11 @@ fn run_simulation(
                 .collect::<Vec<_>>();
 
             // TODO: plot this instead, prolly via a crate
-            println!(
-                "Generation {}. Avg score of the top 10 snakes of prev generation {}",
+            let generation_progress_summary = format!(
+                "Generation {}. Avg score of the {} selected snakes of prev generation: {}",
                 *curr_generation + generation_counter,
-                top_snakes.iter().take(10).map(|s| s.score).sum::<f32>() / 10.
+                sample_size,
+                top_snakes.iter().map(|s| s.score).sum::<f32>() / top_snakes.len() as f32
             );
 
             let mut new_snakes = Vec::with_capacity(SNAKE_COUNT);
@@ -448,6 +453,26 @@ fn run_simulation(
             }
 
             assert_eq!(new_snakes.len(), SNAKE_COUNT);
+
+            let loop_duration_secs = generation_start_ts.elapsed().as_secs_f32();
+            generation_start_ts = std::time::Instant::now();
+
+            if generation_durations.len() > durations_to_store {
+                generation_durations.pop_front();
+            }
+            generation_durations.push_back(loop_duration_secs);
+
+            let avg_duration =
+                generation_durations.iter().sum::<f32>() / generation_durations.len() as f32;
+            let generations_remaining = max_generations - generation_counter;
+            let remaining_time_secs = (avg_duration * generations_remaining as f32) as usize;
+
+            let msg = format!(
+                "{}. Training complete in ~{} seconds",
+                generation_progress_summary, remaining_time_secs
+            );
+
+            println!("{}", msg);
 
             cloned_games = new_snakes;
             generation_counter += 1;
