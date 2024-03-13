@@ -103,13 +103,12 @@ pub(crate) fn predict_direction_naive(snake: &Snake, food: &Option<Position>) ->
 }
 
 pub(crate) fn find_closest_pos(curr_pos: Position, targets: &HashSet<Position>) -> Position {
-    assert!(
-        !targets.is_empty(),
-        "expected to find at least one target, but the set was empty"
-    );
     if targets.len() < 2 {
         // no need for any fancy optimization here. Useful for the default scenario of only one food being spawned at a time
-        return *targets.iter().next().unwrap();
+        return *targets
+            .iter()
+            .next()
+            .expect("Expected to find at least one target, but the set was empty");
     }
 
     let mut tree = KdTree::new(2);

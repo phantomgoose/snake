@@ -5,12 +5,11 @@ const INPUT_LAYER_WIDTH: usize = 8;
 const MIDDLE_LAYER_WIDTH: usize = 64;
 const HIDDEN_LAYER_WIDTH: usize = 64;
 const OUTPUT_LAYER_WIDTH: usize = 4;
-const MUTATION_RATE: f32 = 0.3;
+const MUTATION_RATE: f32 = 0.5;
 
 #[derive(Clone)]
 struct Layer {
     weights: Vec<Vec<f32>>,
-    // Now each layer has multiple neurons, each with its own set of weights
     biases: Vec<f32>,
     activation: Activation,
 }
@@ -19,12 +18,11 @@ struct Layer {
 enum Activation {
     Sigmoid,
     ReLU,
-    // Softmax,
 }
 
 impl Layer {
     fn forward(&self, inputs: &[f32]) -> Vec<f32> {
-        let mut outputs = vec![];
+        let mut outputs = Vec::with_capacity(self.biases.len());
         for (i, bias) in self.biases.iter().enumerate() {
             let mut output = inputs
                 .iter()
@@ -49,16 +47,17 @@ impl Layer {
 
     /// Creates a child by randomly swapping weights & biases between the 2 given layers
     fn crossover(&self, other: &Layer) -> Layer {
-        let mut clone_self = self.clone();
-        let mut clone_other = other.clone();
+        // TODO: fix all the cloning here (probably by switching to arrays for weights/biases)
+        let mut cloned_self = self.clone();
+        let mut cloned_other = other.clone();
         for i in 0..self.weights.len() {
             if random() {
-                std::mem::swap(&mut clone_self.weights[i], &mut clone_other.weights[i]);
-                std::mem::swap(&mut clone_self.biases[i], &mut clone_other.biases[i]);
+                std::mem::swap(&mut cloned_self.weights[i], &mut cloned_other.weights[i]);
+                std::mem::swap(&mut cloned_self.biases[i], &mut cloned_other.biases[i]);
             }
         }
 
-        clone_self
+        cloned_self
     }
 
     fn mutate(mut self) -> Layer {

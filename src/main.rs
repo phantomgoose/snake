@@ -4,6 +4,12 @@ use std::collections::{HashSet, VecDeque};
 use macroquad::prelude::*;
 use macroquad::prelude::KeyCode::{Escape, Q, V};
 use macroquad::rand::ChooseRandom;
+use rayon::iter::IndexedParallelIterator;
+use rayon::iter::ParallelIterator;
+use rayon::prelude::{
+    IntoParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelSlice,
+    ParallelSliceMut,
+};
 
 use utils::{Direction, Position};
 use utils::Direction::{Down, Left, Right, Up};
@@ -20,14 +26,14 @@ const MAX_COLUMNS: usize = 100;
 const FOOD_COUNT: usize = 1;
 const SNAKE_COUNT: usize = 1000;
 
-const SELECTION_RATE: f32 = 0.2;
+const SELECTION_RATE: f32 = 0.3;
 const FOOD_REWARD: f32 = 10000.;
 // snake dies of starvation if it doesn't get to food in this many ticks. Prevents snakes looping around permanently.
 const MAX_TICKS_WITH_NO_FOOD: usize = 400;
 // how many generations to iterate over when training is triggered
-const GENERATIONS_PER_TRAINING_RUN: usize = 300;
+const GENERATIONS_PER_TRAINING_RUN: usize = 400;
 // if a snake eats this much without dying, we assume it's good enough to trigger next evolution
-const MAX_SCORE_PER_GENERATION: f32 = FOOD_REWARD * 20.;
+const MAX_SCORE_PER_GENERATION: f32 = FOOD_REWARD * 25.;
 // whether the snake will die if it collides with itself
 const SELF_COLLISION_ENABLED: bool = true;
 // reward the snake for getting close to food, even if it doesn't consume it
@@ -78,7 +84,7 @@ impl SnakeGame {
         let mut down_boundary = MAX_ROWS;
         for chunk in self.snake.chunks.iter() {
             if *chunk == head_pos {
-                // skip current chunk, we're only intested in the rest of the body
+                // skip the head chunk, we're only interested in the rest of the body
                 continue;
             }
             if chunk.row == head_pos.row {
@@ -370,20 +376,25 @@ fn run_simulation(
 
     loop {
         cloned_games
-            .iter_mut()
+            .par_iter_mut()
             .for_each(|g| g.run_game_logic(false));
 
         let sample_size = (SNAKE_COUNT as f32 * SELECTION_RATE) as usize;
 
-        // trigger evolution once all the snakes are dead OR there is a sufficient sample size of snakes above score threshold (to prevent games from running infinitely)
-        if cloned_games.iter().all(|g| g.snake.dead)
-            || cloned_games.iter().filter(|g| g.score > max_score).count() > sample_size
+        // trigger evolution once all the snakes are dead OR there is a sufficient sample size of snakes above score threshold (to prevent games from running too long)
+        // TODO: score-based threshold here hinders training past a few hundred generations because all of the snakes begin to reach the threshold too easily and stop evolving beyond that point. Should switch to some other metric, like length of time spent on a given iteration of the simulation.
+        if cloned_games.par_iter().all(|g| g.snake.dead)
+            || cloned_games
+                .par_iter()
+                .filter(|g| g.score > max_score)
+                .count()
+                > sample_size
         {
             // TODO: pick some poor performers too, to expand the gene pool
             // find the best performing snakes
-            cloned_games.sort_by(|a, b| a.score.total_cmp(&b.score));
+            cloned_games.par_sort_by(|a, b| a.score.total_cmp(&b.score));
             let mut top_snakes = cloned_games
-                .iter()
+                .par_iter()
                 .rev() // gotta remember to reverse here to get descending order
                 .take(sample_size)
                 .collect::<Vec<_>>();
@@ -407,7 +418,7 @@ fn run_simulation(
             // randomize top snakes and trigger reproduction
             top_snakes.shuffle();
 
-            let snake_pairs = top_snakes.chunks(2).collect::<Vec<_>>();
+            let snake_pairs = top_snakes.par_chunks(2).collect::<Vec<_>>();
 
             while new_snakes.len() < SNAKE_COUNT {
                 for pair in snake_pairs.iter() {
