@@ -5,7 +5,7 @@ const INPUT_LAYER_WIDTH: usize = 10;
 const MIDDLE_LAYER_WIDTH: usize = 64;
 const HIDDEN_LAYER_WIDTH: usize = 64;
 const OUTPUT_LAYER_WIDTH: usize = 4;
-const MUTATION_RATE: f32 = 0.5;
+const MUTATION_RATE: f32 = 0.7;
 
 #[derive(Clone)]
 struct Layer {

@@ -29,11 +29,11 @@ const SNAKE_COUNT: usize = 1000;
 const SELECTION_RATE: f32 = 0.2;
 const FOOD_REWARD: f32 = 10000.;
 // snake dies of starvation if it doesn't get to food in this many ticks. Prevents snakes looping around permanently.
-const MAX_TICKS_WITH_NO_FOOD: usize = 500;
+const MAX_TICKS_WITH_NO_FOOD: usize = 1000;
 // how many generations to iterate over when training is triggered
-const GENERATIONS_PER_TRAINING_RUN: usize = 300;
-// if a snake eats this much without dying, we assume it's good enough to trigger next evolution
-const MAX_SCORE_PER_GENERATION: f32 = FOOD_REWARD * 25.;
+const GENERATIONS_PER_TRAINING_RUN: usize = 200;
+// spend at most this much time on a generation, to avoid infinitely long training steps
+const MAX_GENERATION_DURATION_SECS: f32 = 4.;
 // whether the snake will die if it collides with itself
 const SELF_COLLISION_ENABLED: bool = true;
 // reward the snake for getting close to food, even if it doesn't consume it
@@ -375,7 +375,6 @@ fn init_games(count: usize) -> Vec<SnakeGame> {
 fn run_simulation(
     games: Vec<SnakeGame>,
     max_generations: usize,
-    max_score: f32,
     curr_generation: &mut usize,
 ) -> (Vec<SnakeGame>, SnakeGame) {
     // grab just the NNs from the supplied games
@@ -397,14 +396,9 @@ fn run_simulation(
 
         let sample_size = (SNAKE_COUNT as f32 * SELECTION_RATE) as usize;
 
-        // trigger evolution once all the snakes are dead OR there is a sufficient sample size of snakes above score threshold (to prevent games from running too long)
-        // TODO: score-based threshold here hinders training past a few hundred generations because all of the snakes begin to reach the threshold too easily and stop evolving beyond that point. Should switch to some other metric, like length of time spent on a given iteration of the simulation.
+        // trigger evolution once all the snakes are dead OR the simulation has been running for long enough
         if cloned_games.par_iter().all(|g| g.snake.dead)
-            || cloned_games
-            .par_iter()
-            .filter(|g| g.score > max_score)
-            .count()
-            > sample_size
+            || generation_start_ts.elapsed().as_secs_f32() > MAX_GENERATION_DURATION_SECS
         {
             // TODO: pick some poor performers too, to expand the gene pool
             // find the best performing snakes
@@ -502,12 +496,8 @@ async fn main() {
 
         if is_key_pressed(V) {
             // trigger evolution
-            (games, best_snake) = run_simulation(
-                games,
-                GENERATIONS_PER_TRAINING_RUN,
-                MAX_SCORE_PER_GENERATION,
-                &mut generation,
-            );
+            (games, best_snake) =
+                run_simulation(games, GENERATIONS_PER_TRAINING_RUN, &mut generation);
         }
 
         // TODO: display snake score, food eaten, and length
