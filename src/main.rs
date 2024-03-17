@@ -32,7 +32,7 @@ const SAMPLE_SIZE: usize = (SNAKE_COUNT as f32 * SELECTION_RATE) as usize;
 const FOOD_REWARD: f32 = 10000.;
 // snake dies of starvation if it doesn't get to food in this many simulation ticks.
 // Prevents snakes looping around near food permanently as a winning strategy.
-const MAX_TICKS_WITH_NO_FOOD: usize = 1000;
+const MAX_TICKS_WITH_NO_FOOD: usize = 500;
 // how many generations to iterate over when training is triggered
 const GENERATIONS_PER_TRAINING_RUN: usize = 200;
 // spend at most this much time on a generation, to avoid infinitely long training steps
