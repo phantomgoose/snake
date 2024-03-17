@@ -36,7 +36,7 @@ const MAX_TICKS_WITH_NO_FOOD: usize = 1000;
 // how many generations to iterate over when training is triggered
 const GENERATIONS_PER_TRAINING_RUN: usize = 200;
 // spend at most this much time on a generation, to avoid infinitely long training steps
-const MAX_GENERATION_DURATION_SECS: f32 = 4.;
+const MAX_GENERATION_DURATION_SECS: f32 = 3.;
 
 // whether the snake will die if it collides with itself
 const SELF_COLLISION_ENABLED: bool = true;
