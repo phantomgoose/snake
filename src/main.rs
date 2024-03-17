@@ -36,7 +36,7 @@ const MAX_TICKS_WITH_NO_FOOD: usize = 1000;
 // how many generations to iterate over when training is triggered
 const GENERATIONS_PER_TRAINING_RUN: usize = 200;
 // spend at most this much time on a generation, to avoid infinitely long training steps
-const MAX_GENERATION_DURATION_SECS: f32 = 3.;
+const MAX_GENERATION_DURATION_SECS: f32 = 4.;
 
 // whether the snake will die if it collides with itself
 const SELF_COLLISION_ENABLED: bool = true;
@@ -244,11 +244,11 @@ impl Snake {
             self.food.positions.remove(&target_food_position);
             self.food.refill();
         } else {
-            // reward for being alive, proportional to how close to the food we got
+            // a small reward for being alive, proportional to how close to the food we got
             if REWARD_FOOD_PROXIMITY {
                 let distance =
                     Vec2::from(new_position).distance_squared(target_food_position.into());
-                self.score += 1. / distance;
+                self.score += 0.1 / distance;
             }
 
             // shrink the snake, removing its tail
