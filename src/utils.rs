@@ -17,7 +17,7 @@ const TEXT_PADDING: f32 = 5.;
 pub(crate) const DIRECTIONS: [Direction; 4] = [Left, Right, Up, Down];
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
-pub enum Direction {
+pub(crate) enum Direction {
     Left = 0,
     Right = 1,
     Up = 2,
@@ -42,21 +42,19 @@ impl From<Position> for Vec2 {
     }
 }
 
-pub(crate) fn draw_text_center(msg_str: &str, font_size: u16, text_color: Color) {
-    let text_center = get_text_center(msg_str, None, font_size, 1., 0.0);
+/// Draws the msg to center of the screen
+pub(crate) fn draw_text_center(msg_str: &str) {
+    let text_center = get_text_center(msg_str, None, CENTER_TEXT_SIZE, 1., 0.0);
     draw_text(
         msg_str,
         screen_width() / 2. - text_center.x,
         screen_height() / 2. + text_center.y,
-        font_size as f32,
-        text_color,
+        CENTER_TEXT_SIZE as f32,
+        DEFAULT_TEXT_COLOR,
     );
 }
 
-pub(crate) fn draw_text_center_default(msg_str: &str) {
-    draw_text_center(msg_str, CENTER_TEXT_SIZE, DEFAULT_TEXT_COLOR)
-}
-
+/// Draws the msg to top left corner of the screen
 pub(crate) fn draw_text_corner(messages: &[&str]) {
     let x = TEXT_PADDING;
     let mut y = TEXT_PADDING + CORNER_TEXT_SIZE as f32;
@@ -66,6 +64,7 @@ pub(crate) fn draw_text_corner(messages: &[&str]) {
     }
 }
 
+/// Naive, hardcoded AI for the snake for comparison
 pub(crate) fn predict_direction_naive(snake: &SnakeBody, food: &Option<Position>) -> Direction {
     let current_dir = snake.direction;
     if food.is_none() {
@@ -80,28 +79,26 @@ pub(crate) fn predict_direction_naive(snake: &SnakeBody, food: &Option<Position>
     let row_diff = head_pos.row as i32 - food_pos.row as i32;
     let col_diff = head_pos.col as i32 - food_pos.col as i32;
 
-    if row_diff.abs() > col_diff.abs()
-        && current_dir != Direction::Up
-        && current_dir != Direction::Down
-    {
+    if row_diff.abs() > col_diff.abs() && current_dir != Up && current_dir != Down {
         // vertical adjustment is best
         if row_diff < 0 {
-            Direction::Down
+            Down
         } else {
-            Direction::Up
+            Up
         }
-    } else if current_dir != Direction::Left && current_dir != Direction::Right {
+    } else if current_dir != Left && current_dir != Right {
         // horizontal adjustment is best
         if col_diff < 0 {
-            Direction::Right
+            Right
         } else {
-            Direction::Left
+            Left
         }
     } else {
         current_dir
     }
 }
 
+/// Helper function for finding the closest position to the current one from a set of targets
 pub(crate) fn find_closest_pos(curr_pos: Position, targets: &HashSet<Position>) -> Position {
     if targets.len() < 2 {
         // no need for any fancy optimization here. Useful for the default scenario of only one food being spawned at a time
