@@ -6,7 +6,7 @@ use macroquad::color::WHITE;
 use macroquad::math::Vec2;
 use macroquad::prelude::{Color, draw_text, get_text_center, screen_height, screen_width};
 
-use crate::Snake;
+use crate::SnakeBody;
 use crate::utils::Direction::{Down, Left, Right, Up};
 
 const DEFAULT_TEXT_COLOR: Color = WHITE;
@@ -66,7 +66,7 @@ pub(crate) fn draw_text_corner(messages: &[&str]) {
     }
 }
 
-pub(crate) fn predict_direction_naive(snake: &Snake, food: &Option<Position>) -> Direction {
+pub(crate) fn predict_direction_naive(snake: &SnakeBody, food: &Option<Position>) -> Direction {
     let current_dir = snake.direction;
     if food.is_none() {
         // no food -> no change in direction
