@@ -491,7 +491,7 @@ fn run_simulation(
             let remaining_time_secs = avg_gen_duration * generations_remaining as f32;
 
             let msg = format!(
-                "{}. Training should complete in ~{:.1} seconds",
+                "{}. ~{:.1} seconds remaining.",
                 generation_progress_summary, remaining_time_secs
             );
 
