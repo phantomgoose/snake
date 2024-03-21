@@ -34,9 +34,9 @@ const FOOD_REWARD: f32 = 10000.;
 // Prevents snakes looping around near food permanently as a winning strategy.
 const MAX_TICKS_WITH_NO_FOOD: usize = 500;
 // how many generations to iterate over when training is triggered
-const GENERATIONS_PER_TRAINING_RUN: usize = 200;
+const GENERATIONS_PER_TRAINING_RUN: usize = 150;
 // spend at most this much time on a generation, to avoid infinitely long training steps
-const MAX_GENERATION_DURATION_SECS: f32 = 4.;
+const MAX_GENERATION_DURATION_SECS: f32 = 5.;
 
 // whether the snake will die if it collides with itself
 const SELF_COLLISION_ENABLED: bool = true;

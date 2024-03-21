@@ -10,7 +10,7 @@ const MUTATION_RATE: f32 = 0.5;
 struct Layer {
     weights: Vec<Vec<f32>>,
     biases: Vec<f32>,
-    activation: Activation,
+    activation: Option<Activation>,
 }
 
 #[derive(Copy, Clone)]
@@ -30,14 +30,15 @@ impl Layer {
                 .sum::<f32>()
                 + bias;
             output = match self.activation {
-                Activation::Sigmoid => 1.0 / (1.0 + (-output).exp()),
-                Activation::ReLU => {
+                Some(Activation::Sigmoid) => 1.0 / (1.0 + (-output).exp()),
+                Some(Activation::ReLU) => {
                     if output < 0.0 {
                         0.0
                     } else {
                         output
                     }
                 }
+                None => output,
             };
             outputs.push(output);
         }
@@ -86,7 +87,11 @@ fn get_rand_vec_of_size(size: usize) -> Vec<f32> {
     vec
 }
 
-fn get_layer_of_size(input_size: usize, output_size: usize, activation: Activation) -> Layer {
+fn get_layer_of_size(
+    input_size: usize,
+    output_size: usize,
+    activation: Option<Activation>,
+) -> Layer {
     let mut weights = Vec::with_capacity(output_size);
     for _ in 0..output_size {
         weights.push(get_rand_vec_of_size(input_size));
@@ -107,10 +112,13 @@ impl Default for NeuralNetwork {
 
 impl NeuralNetwork {
     pub(crate) fn new() -> Self {
-        let activation = Activation::ReLU;
-        let input_layer = get_layer_of_size(INPUT_LAYER_WIDTH, HIDDEN_LAYER_WIDTH, activation);
-        let hidden_layer = get_layer_of_size(HIDDEN_LAYER_WIDTH, HIDDEN_LAYER_WIDTH, activation);
-        let output_layer = get_layer_of_size(HIDDEN_LAYER_WIDTH, OUTPUT_LAYER_WIDTH, activation);
+        let input_layer = get_layer_of_size(INPUT_LAYER_WIDTH, HIDDEN_LAYER_WIDTH, None);
+        let hidden_layer = get_layer_of_size(
+            INPUT_LAYER_WIDTH,
+            HIDDEN_LAYER_WIDTH,
+            Some(Activation::ReLU),
+        );
+        let output_layer = get_layer_of_size(HIDDEN_LAYER_WIDTH, OUTPUT_LAYER_WIDTH, None); // softmax will be applied to the whole layer later
         Self {
             layers: vec![input_layer, hidden_layer, output_layer],
         }
