@@ -524,6 +524,8 @@ async fn main() {
     let mut generation = 0;
     let mut best_snake = games[0].clone();
 
+    let instructions = "Press ESC or Q to quit. Press V to train the snek.";
+
     // main render loop
     loop {
         if is_key_pressed(Escape) || is_key_pressed(Q) {
@@ -548,6 +550,7 @@ async fn main() {
         let gen_counter_msg = format!("Generation: {}", generation);
         let food_msg = format!("Food consumed: {}", best_snake.food_eaten);
         draw_text_corner(&[
+            instructions,
             fps_msg.as_str(),
             gen_counter_msg.as_str(),
             food_msg.as_str(),
