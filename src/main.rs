@@ -54,6 +54,7 @@ struct Snake {
     body: SnakeBody,
     network: NeuralNetwork,
     ticks_until_starvation: usize,
+    food_eaten: usize,
     score: f32,
     food: SnakeFood,
 }
@@ -66,6 +67,7 @@ impl Snake {
             body: SnakeBody::new(),
             network: neural_network.unwrap_or_default(),
             score: 0.,
+            food_eaten: 0,
             ticks_until_starvation: MAX_TICKS_WITH_NO_FOOD,
             food: SnakeFood::new(),
         }
@@ -241,6 +243,7 @@ impl Snake {
             // no longer starving
             self.ticks_until_starvation = MAX_TICKS_WITH_NO_FOOD;
             // consume the food and spawn some more
+            self.food_eaten += 1;
             self.food.positions.remove(&target_food_position);
             self.food.refill();
         } else {
@@ -289,6 +292,7 @@ impl Snake {
         self.body = SnakeBody::new();
         self.food = SnakeFood::new();
         self.score = 0.;
+        self.food_eaten = 0;
         self.ticks_until_starvation = MAX_TICKS_WITH_NO_FOOD;
     }
 }
@@ -436,10 +440,11 @@ fn run_simulation(
 
             // TODO: plot this instead, probably via a crate
             let generation_progress_summary = format!(
-                "Generation {}. Avg score of the {} selected snakes of prev generation: {}",
+                "Generation {}. Avg food eaten of the {} selected snakes of prev generation: {}",
                 *curr_generation + generation_counter,
                 SAMPLE_SIZE,
-                top_snakes.iter().map(|s| s.score).sum::<f32>() / top_snakes.len() as f32
+                top_snakes.iter().map(|s| s.food_eaten).sum::<usize>() as f32
+                    / top_snakes.len() as f32
             );
 
             let mut new_snakes = Vec::with_capacity(SNAKE_COUNT);
@@ -538,10 +543,15 @@ async fn main() {
 
         best_snake.draw(chunk_width, chunk_height);
 
-        // render fps and generation counters
+        // render various counters
         let fps_msg = format!("FPS: {}", get_fps());
         let gen_counter_msg = format!("Generation: {}", generation);
-        draw_text_corner(&[fps_msg.as_str(), gen_counter_msg.as_str()]);
+        let food_msg = format!("Food consumed: {}", best_snake.food_eaten);
+        draw_text_corner(&[
+            fps_msg.as_str(),
+            gen_counter_msg.as_str(),
+            food_msg.as_str(),
+        ]);
 
         next_frame().await
     }
